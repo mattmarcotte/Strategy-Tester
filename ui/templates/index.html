@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Strategy Tester</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+</head>
+<body>
+  <div class="background-grid" aria-hidden="true"></div>
+  <div class="page-shell">
+    <header class="topbar card fade-in">
+      <div>
+        <p class="eyebrow">Local Strategy Workbench</p>
+        <h1>Strategy Tester Interface</h1>
+      </div>
+      <div class="topbar-meta mono">FastAPI + HTML UI</div>
+    </header>
+
+    <main class="layout">
+      <aside class="card controls-panel slide-up">
+        <h2>Configuration</h2>
+        <p class="panel-subtitle">Edit settings and run without touching YAML.</p>
+
+        <form id="strategy-form" method="post" action="/run">
+          <section class="panel-section">
+            <h3>Market Setup</h3>
+            <div class="field-grid">
+              <label>
+                Symbol
+                <input type="text" name="symbol" value="{{ form_state.symbol }}" placeholder="SPY" required />
+              </label>
+              <label>
+                Timeframe
+                <input type="text" name="timeframe" value="{{ form_state.timeframe }}" placeholder="1d" required />
+              </label>
+              <label>
+                Start
+                <input type="date" name="start" value="{{ form_state.start }}" required />
+              </label>
+              <label>
+                End
+                <input type="date" name="end" value="{{ form_state.end }}" required />
+              </label>
+            </div>
+          </section>
+
+          <section class="panel-section">
+            <div class="section-head">
+              <h3>Indicators</h3>
+              <button type="button" id="add-indicator" class="btn-secondary">Add Row</button>
+            </div>
+            <div class="table-wrap">
+              <table class="compact-table indicator-table">
+                <thead>
+                  <tr>
+                    <th>Alias</th>
+                    <th>Kind</th>
+                    <th>Length</th>
+                    <th>Source</th>
+                    <th>Multiplier</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="indicator-rows">
+                  {% for ind in form_state.indicators %}
+                  <tr>
+                    <td><input type="text" name="indicator_alias" value="{{ ind.alias }}" placeholder="ema21" /></td>
+                    <td>
+                      <select name="indicator_kind">
+                        <option value="">Select</option>
+                        <option value="ema" {% if ind.kind == 'ema' %}selected{% endif %}>ema</option>
+                        <option value="rsi" {% if ind.kind == 'rsi' %}selected{% endif %}>rsi</option>
+                        <option value="macd" {% if ind.kind == 'macd' %}selected{% endif %}>macd</option>
+                        <option value="adx" {% if ind.kind == 'adx' %}selected{% endif %}>adx</option>
+                        <option value="supertrend" {% if ind.kind == 'supertrend' %}selected{% endif %}>supertrend</option>
+                      </select>
+                    </td>
+                    <td><input type="number" name="indicator_length" min="1" value="{{ ind.length }}" /></td>
+                    <td><input type="text" name="indicator_source" value="{{ ind.source }}" placeholder="close" /></td>
+                    <td><input type="number" name="indicator_multiplier" step="0.1" value="{{ ind.multiplier }}" /></td>
+                    <td><button type="button" class="btn-danger remove-indicator">Remove</button></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel-section">
+            <div class="section-head">
+              <h3>Strategy</h3>
+              <label class="toggle">
+                <input id="use-strategy" type="checkbox" name="use_strategy" {% if form_state.use_strategy %}checked{% endif %} />
+                Enable
+              </label>
+            </div>
+            <div id="strategy-fields" class="strategy-fields {% if not form_state.use_strategy %}is-hidden{% endif %}">
+              <input type="hidden" id="rule-mode-value" name="rule_mode" value="{{ form_state.rule_mode }}" />
+              <input type="hidden" id="entry-rule-canonical" name="entry_rule" value="{{ form_state.strategy.entry_rule }}" />
+              <input type="hidden" id="exit-rule-canonical" name="exit_rule" value="{{ form_state.strategy.exit_rule }}" />
+              <div class="rule-mode-row">
+                <span class="rule-mode-label">Rule Mode</span>
+                <div class="mode-toggle">
+                  <span>Simple</span>
+                  <label class="switch" for="rule-mode-toggle">
+                    <input id="rule-mode-toggle" type="checkbox" {% if form_state.rule_mode == 'advanced' %}checked{% endif %} />
+                    <span class="switch-slider"></span>
+                  </label>
+                  <span>Advanced</span>
+                </div>
+              </div>
+              <div class="field-grid">
+                <label>
+                  Starting Cash
+                  <input type="number" name="starting_cash" step="100" value="{{ form_state.strategy.starting_cash }}" />
+                </label>
+                <label>
+                  Position Size %
+                  <input type="number" name="position_size_pct" step="0.01" min="0.01" max="1" value="{{ form_state.strategy.position_size_pct }}" />
+                </label>
+                <div id="rule-simple-panel" class="rule-panel {% if form_state.rule_mode == 'advanced' %}is-hidden{% endif %}">
+                  <label>
+                    Entry Rule
+                    <input type="text" name="entry_rule_simple" value="{{ form_state.strategy.entry_rule_simple }}" placeholder="ema21 > ema50" />
+                  </label>
+                  <label>
+                    Exit Rule
+                    <input type="text" name="exit_rule_simple" value="{{ form_state.strategy.exit_rule_simple }}" placeholder="ema21 < ema50" />
+                  </label>
+                </div>
+                <div id="rule-advanced-panel" class="rule-panel {% if form_state.rule_mode != 'advanced' %}is-hidden{% endif %}">
+                  <label>
+                    Entry Rule
+                    <textarea name="entry_rule_advanced" rows="6" placeholder="all:
+  - { left: rsi14, op: '<', right: 40 }
+  - { left: macd_hist, op: '>', right: 0 }">{{ form_state.strategy.entry_rule_advanced }}</textarea>
+                  </label>
+                  <label>
+                    Exit Rule
+                    <textarea name="exit_rule_advanced" rows="6" placeholder="any:
+  - { left: macd_hist, op: '<', right: 0 }
+  - { left: close, op: '<', right: ema21 }">{{ form_state.strategy.exit_rule_advanced }}</textarea>
+                  </label>
+                </div>
+                <p class="panel-subtitle rule-hint">Simple mode supports one-line expressions. Advanced mode supports YAML blocks with <code>all</code>/<code>any</code>. You can paste full <code>entry:</code> + <code>exit:</code> YAML into Entry and leave Exit blank.</p>
+                <label>
+                  Price Column
+                  <input type="text" name="price_column" value="{{ form_state.strategy.price_column }}" placeholder="close" />
+                </label>
+                <label class="check-row">
+                  <input type="checkbox" name="force_close_end" {% if form_state.strategy.force_close_end %}checked{% endif %} />
+                  Force close at end
+                </label>
+                <label class="check-row">
+                  <input type="checkbox" name="allow_short" {% if form_state.strategy.allow_short %}checked{% endif %} />
+                  Allow short
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <button type="submit" class="btn-primary">Run Backtest</button>
+        </form>
+      </aside>
+
+      <section class="results-panel">
+        {% if error %}
+        <div class="card alert-card fade-in">
+          <h2>Execution Error</h2>
+          <p>{{ error }}</p>
+        </div>
+        {% endif %}
+
+        {% if result %}
+        <div class="summary-grid fade-in">
+          <article class="card metric-card">
+            <h3>Symbol</h3>
+            <p class="metric-value mono">{{ result.summary.symbol }}</p>
+            <p class="metric-sub">{{ result.summary.timeframe }} | {{ result.summary.start }} to {{ result.summary.end }}</p>
+          </article>
+          <article class="card metric-card">
+            <h3>Buy &amp; Hold</h3>
+            <p class="metric-value mono">{{ '%.2f'|format(result.summary.buy_and_hold_pct) }}%</p>
+            <p class="metric-sub">Price-only baseline</p>
+          </article>
+          <article class="card metric-card">
+            <h3>Strategy Return</h3>
+            <p class="metric-value mono">
+              {% if result.summary.strategy_return_pct is not none %}
+              {{ '%.2f'|format(result.summary.strategy_return_pct) }}%
+              {% else %}
+              n/a
+              {% endif %}
+            </p>
+            <p class="metric-sub">{% if result.summary.final_equity is not none %}Final equity {{ '%.2f'|format(result.summary.final_equity) }}{% else %}Strategy disabled{% endif %}</p>
+          </article>
+          <article class="card metric-card">
+            <h3>Trades</h3>
+            <p class="metric-value mono">{{ result.summary.num_trades }}</p>
+            <p class="metric-sub">Rows loaded: {{ result.summary.rows }}</p>
+          </article>
+        </div>
+
+        <div class="card chart-card slide-up">
+          <h2>Price + Indicators</h2>
+          <div id="price-chart" class="chart"></div>
+        </div>
+
+        {% if result.equity_chart_payload %}
+        <div class="card chart-card slide-up">
+          <h2>Portfolio Equity Curve</h2>
+          <div id="equity-chart" class="chart small"></div>
+        </div>
+        {% endif %}
+
+        {% if result.drawdown_chart_payload %}
+        <div class="card chart-card slide-up">
+          <h2>Drawdown</h2>
+          <div id="drawdown-chart" class="chart small"></div>
+        </div>
+        {% endif %}
+
+        <div class="card table-card slide-up">
+          <h2>Strategy Metrics</h2>
+          <div class="table-wrap">
+            <table class="compact-table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in result.metric_rows %}
+                <tr>
+                  <td>{{ row.label }}</td>
+                  <td class="mono">{{ row.value }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card table-card slide-up">
+          <h2>Trades</h2>
+          {% if result.trades %}
+          <div class="table-wrap">
+            <table class="compact-table">
+              <thead>
+                <tr>
+                  <th>Side</th>
+                  <th>Entry Date</th>
+                  <th>Entry Price</th>
+                  <th>Exit Date</th>
+                  <th>Exit Price</th>
+                  <th>Shares</th>
+                  <th>PNL</th>
+                  <th>Return %</th>
+                  <th>Forced</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for trade in result.trades %}
+                <tr>
+                  <td class="mono">{{ trade.side }}</td>
+                  <td class="mono">{{ trade.entry_date }}</td>
+                  <td class="mono">{{ trade.entry_price }}</td>
+                  <td class="mono">{{ trade.exit_date }}</td>
+                  <td class="mono">{{ trade.exit_price }}</td>
+                  <td class="mono">{{ trade.shares }}</td>
+                  <td class="mono">{{ trade.pnl }}</td>
+                  <td class="mono">{{ trade.return_pct }}</td>
+                  <td class="mono">{{ 'yes' if trade.forced_exit else 'no' }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p class="empty-text">No trades generated for this run.</p>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="card placeholder-card fade-in">
+          <h2>Ready To Run</h2>
+          <p>Set your parameters in the left panel and run to render charts and tables here.</p>
+          <p class="mono">This UI uses the same backend modules as your CLI flow.</p>
+        </div>
+        {% endif %}
+      </section>
+    </main>
+  </div>
+
+  {% if result and result.price_chart_payload %}
+  <script id="price-chart-json" type="application/json">{{ result.price_chart_payload | tojson }}</script>
+  {% endif %}
+  {% if result and result.equity_chart_payload %}
+  <script id="equity-chart-json" type="application/json">{{ result.equity_chart_payload | tojson }}</script>
+  {% endif %}
+  {% if result and result.drawdown_chart_payload %}
+  <script id="drawdown-chart-json" type="application/json">{{ result.drawdown_chart_payload | tojson }}</script>
+  {% endif %}
+  <script src="{{ url_for('static', path='app.js') }}"></script>
+</body>
+</html>

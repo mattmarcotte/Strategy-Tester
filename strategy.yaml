@@ -1,0 +1,34 @@
+symbol: "SPY"
+timeframe: "1d"
+start: "2020-01-01"
+end: "2026-08-01"
+
+indicators:
+  rsi14:
+    kind: "rsi"
+    length: 14
+    source: "close"
+
+  ema21:
+    kind: "ema"
+    length: 21
+    source: "close"
+
+  ema50:
+    kind: "ema"
+    length: 50
+    source: "close"
+  
+  ema200:
+    kind: "ema"
+    length: 200
+    source: "close"
+
+
+strategy:
+  starting_cash: 10000
+  position_size_pct: 1
+  price_column: "close"
+  entry_rule: "(rsi14 < 30)"
+  exit_rule: "(rsi14 > 70)"
+  force_close_end: true

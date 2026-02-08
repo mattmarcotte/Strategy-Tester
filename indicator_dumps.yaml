@@ -1,0 +1,8 @@
+  st:
+    kind: "supertrend"
+    length: 7
+    multiplier: 3.0
+
+  adx14:
+    kind: "adx"
+    length: 14
